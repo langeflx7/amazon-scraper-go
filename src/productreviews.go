@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-func FetchProductReviews(asin string, review_count int) ([]string, error) {
+func FetchProductReviews(asin string, reviewCount int) ([]string, error) {
 	var reviews []string
 	url := "https://www.amazon.de/-/en/product-reviews/" + asin + "??ie=UTF8&reviewerType=all_reviews "
 	// HTTP-Client erstellen
@@ -63,15 +63,15 @@ func FetchProductReviews(asin string, review_count int) ([]string, error) {
 			reviews = append(reviews, review)
 		}
 	})
-	var reviewsnum = len(reviews)
-	if reviewsnum == 0 {
+	var reviewsNum = len(reviews)
+	if reviewsNum == 0 {
 		return nil, nil
-	} else if reviewsnum < review_count {
-		errString := "Only Found " + strconv.Itoa(reviewsnum) + "reviews"
+	} else if reviewsNum < reviewCount {
+		errString := "Only Found " + strconv.Itoa(reviewsNum) + "reviews"
 		return reviews, errors.New(errString)
 	}
-	if review_count != 0 {
-		return reviews[0:review_count], nil
+	if reviewCount != 0 {
+		return reviews[0:reviewCount], nil
 	} else {
 		return reviews, nil
 	}
