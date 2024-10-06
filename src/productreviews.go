@@ -6,6 +6,7 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
+	"io"
 	"strconv"
 )
 
@@ -42,7 +43,12 @@ func FetchProductReviews(asin string, review_count int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(resp.Body)
 
 	// HTML parsen
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
