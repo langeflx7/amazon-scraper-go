@@ -1,15 +1,17 @@
 package main
 
 import (
+	"errors"
 	"github.com/PuerkitoBio/goquery"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
+	"strconv"
 )
 
-func FetchProductReviews(url string) ([]string, error) {
+func FetchProductReviews(asin string, review_count int) ([]string, error) {
 	var reviews []string
-
+	url := "https://www.amazon.de/-/en/product-reviews/" + asin + "??ie=UTF8&reviewerType=all_reviews "
 	// HTTP-Client erstellen
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
@@ -55,10 +57,16 @@ func FetchProductReviews(url string) ([]string, error) {
 			reviews = append(reviews, review)
 		}
 	})
-
-	if len(reviews) == 0 {
+	var reviewsnum = len(reviews)
+	if reviewsnum == 0 {
 		return nil, nil
+	} else if reviewsnum < review_count {
+		errString := "Only Found " + strconv.Itoa(reviewsnum) + "reviews"
+		return reviews, errors.New(errString)
 	}
-
-	return reviews, nil
+	if review_count != 0 {
+		return reviews[0:review_count], nil
+	} else {
+		return reviews, nil
+	}
 }

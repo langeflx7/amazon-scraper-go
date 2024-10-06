@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/langeflx7/amazonscrapergo/src/Model"
+	"io"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -9,10 +11,20 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
-func FetchProductInfo(asin string) (string, string, string, string, error) {
+var (
+	fetched_Information Model.Product
+)
+
+func FetchProductInfo(asin string) (Model.Product, error) {
 	// HTTP-Client erstellen
 
 	// Concatenate URL directly with product ASIN
+	failedScrape := Model.Product{
+		Title:       "",
+		Description: "",
+		Rating:      "",
+		Price:       "",
+	}
 	url := "https://www.amazon.de/-/en/dp/" + asin
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
@@ -24,31 +36,35 @@ func FetchProductInfo(asin string) (string, string, string, string, error) {
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	if err != nil {
-		return "", "", "", "", err
+		return failedScrape, err
 	}
 
 	// HTTP-Anfrage erstellen
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return "", "", "", "", err
+		return failedScrape, err
 	}
 
 	// Header hinzufügen
 	req.Header = http.Header{
 		"user-agent": {"Mozilla/5.0 ... Chrome/128.0.0.0 Safari/537.36"},
 	}
-
 	// Anfrage ausführen
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", "", "", err
+		return failedScrape, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(resp.Body)
 
 	// HTML parsen
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return "", "", "", "", err
+		return failedScrape, err
 	}
 
 	// Produktinformationen extrahieren
@@ -84,5 +100,11 @@ func FetchProductInfo(asin string) (string, string, string, string, error) {
 	if price == "" {
 		price = "Preis nicht gefunden"
 	}
-	return title, description, rating, price, nil
+	fetched_Information = Model.Product{
+		Title:       title,
+		Description: description,
+		Rating:      rating,
+		Price:       price,
+	}
+	return fetched_Information, nil
 }
