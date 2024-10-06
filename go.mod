@@ -3,11 +3,14 @@ module github.com/langeflx7/amazonscrapergo
 go 1.23.1
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.0 // indirect
+	github.com/PuerkitoBio/goquery v1.10.0
+	github.com/bogdanfinn/fhttp v0.5.28
+	github.com/bogdanfinn/tls-client v1.7.8
+)
+
+require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
-	github.com/bogdanfinn/fhttp v0.5.28 // indirect
-	github.com/bogdanfinn/tls-client v1.7.8 // indirect
 	github.com/bogdanfinn/utls v1.6.1 // indirect
 	github.com/cloudflare/circl v1.3.6 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect

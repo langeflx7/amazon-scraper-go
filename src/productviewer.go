@@ -9,8 +9,11 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
-func FetchProductInfo(url string) (string, string, string, error) {
+func FetchProductInfo(asin string) (string, string, string, string, error) {
 	// HTTP-Client erstellen
+
+	// Concatenate URL directly with product ASIN
+	url := "https://www.amazon.de/-/en/dp/" + asin
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
@@ -21,13 +24,13 @@ func FetchProductInfo(url string) (string, string, string, error) {
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 
 	// HTTP-Anfrage erstellen
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 
 	// Header hinzufügen
@@ -38,14 +41,14 @@ func FetchProductInfo(url string) (string, string, string, error) {
 	// Anfrage ausführen
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	defer resp.Body.Close()
 
 	// HTML parsen
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 
 	// Produktinformationen extrahieren
@@ -54,7 +57,7 @@ func FetchProductInfo(url string) (string, string, string, error) {
 		title = "Titel nicht gefunden"
 	}
 
-	description := strings.TrimSpace(doc.Find("#productDescription").Text())
+	description := strings.TrimSpace(strings.TrimSpace(doc.Find("#productDescription").Text()))
 	if description == "" {
 		description = strings.TrimSpace(doc.Find("#feature-bullets").Text())
 		if description == "" {
@@ -62,10 +65,24 @@ func FetchProductInfo(url string) (string, string, string, error) {
 		}
 	}
 
-	reviewsSummary := strings.TrimSpace(doc.Find("#acrCustomerReviewText").Text())
-	if reviewsSummary == "" {
-		reviewsSummary = "Bewertungen nicht gefunden"
+	ratingClass := strings.TrimSpace(doc.Find("span.a-size-base.a-color-base").Text())
+	words := strings.Fields(ratingClass)
+	var rating string
+	if len(words) > 0 {
+		rating = words[0]
+	}
+	if rating == "" {
+		rating = "Bewertung nicht gefunden"
 	}
 
-	return title, description, reviewsSummary, nil
+	priceClass := strings.TrimSpace(doc.Find("span.aok-offscreen").Text())
+	priceArray := strings.Fields(priceClass)
+	var price string
+	if len(priceArray) > 0 {
+		price = priceArray[0]
+	}
+	if price == "" {
+		price = "Preis nicht gefunden"
+	}
+	return title, description, rating, price, nil
 }
