@@ -6,4 +6,5 @@ type Product struct {
 	Rating        string
 	Price         string
 	ReviewSummary string
+	ExtraDetails  string
 }

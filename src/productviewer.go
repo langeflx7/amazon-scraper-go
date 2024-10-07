@@ -12,21 +12,22 @@ import (
 )
 
 var (
-	fetched_Information Model.Product
+	fetchedInformation Model.Product
 )
 
 func FetchProductInfo(asin string) (Model.Product, error) {
-	// HTTP-Client erstellen
 
-	// Concatenate URL directly with product ASIN
 	failedScrape := Model.Product{
 		Title:       "",
 		Description: "",
 		Rating:      "",
 		Price:       "",
 	}
+	// Concatenate URL directly with product ASIN
 	url := "https://www.amazon.de/-/en/dp/" + asin
 	jar := tls_client.NewCookieJar()
+
+	// Create HTTP client
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
 		tls_client.WithClientProfile(profiles.Chrome_124),
@@ -39,17 +40,17 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		return failedScrape, err
 	}
 
-	// HTTP-Anfrage erstellen
+	// Create HTTP request
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return failedScrape, err
 	}
 
-	// Header hinzufügen
+	// Add headers
 	req.Header = http.Header{
 		"user-agent": {"Mozilla/5.0 ... Chrome/128.0.0.0 Safari/537.36"},
 	}
-	// Anfrage ausführen
+	// Execute request
 	resp, err := client.Do(req)
 	if err != nil {
 		return failedScrape, err
@@ -61,23 +62,23 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		}
 	}(resp.Body)
 
-	// HTML parsen
+	// HTML parser
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return failedScrape, err
 	}
 
-	// Produktinformationen extrahieren
+	// Product Information extraction
 	title := strings.TrimSpace(doc.Find("#productTitle").Text())
 	if title == "" {
-		title = "Titel nicht gefunden"
+		title = "Title not found"
 	}
 
 	description := strings.TrimSpace(strings.TrimSpace(doc.Find("#productDescription").Text()))
 	if description == "" {
 		description = strings.TrimSpace(doc.Find("#feature-bullets").Text())
 		if description == "" {
-			description = "Beschreibung nicht gefunden"
+			description = "Description not found"
 		}
 	}
 
@@ -88,23 +89,33 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		rating = words[0]
 	}
 	if rating == "" {
-		rating = "Bewertung nicht gefunden"
+		rating = "Rating not found"
 	}
 
-	priceClass := strings.TrimSpace(doc.Find("span.aok-offscreen").Text())
-	priceArray := strings.Fields(priceClass)
 	var price string
-	if len(priceArray) > 0 {
-		price = priceArray[0]
+	priceClass := strings.TrimSpace(doc.Find("span.aok-offscreen").Text())
+	if priceClass != "" {
+		if strings.Contains(priceClass, "&euro;") {
+			cleanPriceClass := strings.ReplaceAll(priceClass, "&euro;", "")
+			price = "€" + strings.Join(strings.Split(cleanPriceClass, " ")[:3], " ")
+		} else {
+			price = strings.Fields(priceClass)[0]
+		}
 	}
-	if price == "" {
-		price = "Preis nicht gefunden"
+	var extraInfoCategories []string
+	doc.Find("ul.a-unordered-list.a-nostyle.a-vertical.a-spacing-none.detail-bullet-list").Each(func(i int, s *goquery.Selection) {
+		extraProductInfo := strings.TrimSpace(s.Find("li").Text())
+		if extraProductInfo != "" {
+			extraInfoCategories = append(extraInfoCategories, extraProductInfo)
+		}
+	})
+	extraInfoString := strings.Join(strings.Fields(strings.Join(extraInfoCategories[:2], "")), " ")
+	fetchedInformation = Model.Product{
+		Title:        title,
+		Description:  description,
+		Rating:       rating,
+		Price:        price,
+		ExtraDetails: extraInfoString,
 	}
-	fetched_Information = Model.Product{
-		Title:       title,
-		Description: description,
-		Rating:      rating,
-		Price:       price,
-	}
-	return fetched_Information, nil
+	return fetchedInformation, nil
 }

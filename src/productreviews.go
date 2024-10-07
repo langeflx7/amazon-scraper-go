@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"github.com/PuerkitoBio/goquery"
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
@@ -10,10 +9,12 @@ import (
 	"strconv"
 )
 
-func FetchProductReviews(asin string, reviewCount int) ([]string, error) {
-	var reviews []string
-	url := "https://www.amazon.de/-/en/product-reviews/" + asin + "??ie=UTF8&reviewerType=all_reviews "
-	// HTTP-Client erstellen
+var (
+	reviews     []string
+	pageReviews []string
+)
+
+func FetchReviewsPerPage(url string) ([]string, error) {
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
@@ -27,18 +28,18 @@ func FetchProductReviews(asin string, reviewCount int) ([]string, error) {
 		return nil, err
 	}
 
-	// HTTP-Anfrage erstellen
+	// Create HTTP request
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Header hinzufügen
+	// Add headers
 	req.Header = http.Header{
 		"user-agent": {"Mozilla/5.0 ... Chrome/128.0.0.0 Safari/537.36"},
 	}
 
-	// Anfrage ausführen
+	// Execute request
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -50,29 +51,42 @@ func FetchProductReviews(asin string, reviewCount int) ([]string, error) {
 		}
 	}(resp.Body)
 
-	// HTML parsen
+	// HTML parser
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	// Bewertungen extrahieren
+	// Extract reviews
 	doc.Find(".a-section.review.aok-relative").Each(func(i int, s *goquery.Selection) {
 		review := s.Find("div.a-row.a-spacing-small.review-data > span > span").Text()
 		if review != "" {
 			reviews = append(reviews, review)
 		}
 	})
-	var reviewsNum = len(reviews)
-	if reviewsNum == 0 {
-		return nil, nil
-	} else if reviewsNum < reviewCount {
-		errString := "Only Found " + strconv.Itoa(reviewsNum) + "reviews"
-		return reviews, errors.New(errString)
+	return reviews, nil
+}
+func FetchProductReviews(asin string, reviewCount int) ([]string, error) {
+	url := "https://www.amazon.de/-/en/product-reviews/" + asin + "??ie=UTF8&reviewerType=all_reviews"
+	pageReviews, err = FetchReviewsPerPage(url)
+	if err != nil {
+		return nil, err
 	}
-	if reviewCount != 0 {
-		return reviews[0:reviewCount], nil
-	} else {
-		return reviews, nil
+
+	var pageNumber = 2
+	for len(pageReviews) < reviewCount {
+		url = url + "&pageNumber=" + strconv.Itoa(pageNumber)
+		extraPageReviews, err := FetchReviewsPerPage(url)
+		if err != nil {
+			return nil, err
+		}
+		pageReviews = append(pageReviews, extraPageReviews...)
+		if len(pageReviews) < reviewCount {
+			pageNumber++
+			continue
+		} else {
+			break
+		}
 	}
+	return pageReviews[:reviewCount], nil
 }
