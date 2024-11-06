@@ -13,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/langeflx7/amazonscrapergo/src/Model"
 	"github.com/langeflx7/amazonscrapergo/src/productviewer"
+	"github.com/rs/cors"
 )
 
 var (
@@ -51,11 +52,23 @@ func checkDBConnection() error {
 }
 
 func main() {
-	// HTTP routes and server setup
+	// CORS-Handler einrichten
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},                                       // Alle Ursprünge erlauben
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}, // Erlaubte Methoden
+		AllowedHeaders: []string{"Content-Type", "Authorization"},           // Erlaubte Header
+	})
+
+	// HTTP-Routen einrichten
 	http.HandleFunc("/fetch-product", fetchProductHandler)
 	http.HandleFunc("/healthz", healthCheckHandler) // Health check endpoint
+
+	// CORS auf alle Routen anwenden
+	handlerWithCORS := c.Handler(http.DefaultServeMux)
+
+	// Starte den Server
 	log.Println("Server started at :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", handlerWithCORS))
 }
 
 // fetchProductHandler handles requests to fetch product data and update the database
