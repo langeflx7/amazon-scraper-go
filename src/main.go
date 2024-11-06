@@ -52,11 +52,12 @@ func checkDBConnection() error {
 }
 
 func main() {
-	// CORS-Handler einrichten
+	// CORS-Handler setup
 	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},                                       // Alle Ursprünge erlauben
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}, // Erlaubte Methoden
-		AllowedHeaders: []string{"Content-Type", "Authorization"},           // Erlaubte Header
+		AllowedOrigins:   []string{"*"}, // allow every origin
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
 	})
 
 	// HTTP-Routen einrichten
