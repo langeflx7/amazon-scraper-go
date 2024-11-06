@@ -2,6 +2,8 @@ package productviewer
 
 import (
 	"io"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/langeflx7/amazonscrapergo/src/Model"
@@ -22,7 +24,7 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		Title:       "",
 		Description: "",
 		Rating:      "",
-		Price:       "",
+		Price:       0.0, // Price should be a float64
 	}
 	// Concatenate URL directly with product ASIN
 	url := "https://www.amazon.de/-/en/dp/" + asin
@@ -93,24 +95,22 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		rating = "Rating not found"
 	}
 
+	// Price extraction and cleanup
 	var price string
 	priceClass := strings.TrimSpace(doc.Find("span.aok-offscreen").Text())
 	if priceClass != "" {
-		if strings.Contains(priceClass, "&euro;") {
-			cleanPriceClass := strings.ReplaceAll(priceClass, "&euro;", "")
-			price = "€" + strings.Join(strings.Split(cleanPriceClass, " ")[:3], " ")
-		} else {
-			price = strings.Fields(priceClass)[0]
-		}
+		// Remove any non-numeric characters (like the Euro symbol)
+		price = cleanPrice(priceClass)
 	} else {
 		priceFromButton := strings.TrimSpace(doc.Find("span.a-size-mini.olpWrapper").Text())
 		price = priceFromButton
 		if price == "" {
 			doc.Find("span.a-price.a-text-price.a-size-medium").Each(func(i int, s *goquery.Selection) {
-				price = "€" + strings.Split(s.Text(), "€")[1]
+				price = "â‚¬" + strings.Split(s.Text(), "â‚¬")[1]
 			})
 		}
 	}
+
 	var extraInfoCategories []string
 	doc.Find("ul.a-unordered-list.a-nostyle.a-vertical.a-spacing-none.detail-bullet-list").Each(func(i int, s *goquery.Selection) {
 		extraProductInfo := strings.TrimSpace(s.Find("li").Text())
@@ -146,12 +146,31 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		concat := categoryArray[i] + ":" + categoryValueArray[i] + ",\n"
 		extraInfoString = extraInfoString + concat
 	}
+
+	// Convert price string to float64
+	priceFloat, err := strconv.ParseFloat(price, 64)
+	if err != nil {
+		// If price parsing fails, return 0.0
+		priceFloat = 0.0
+	}
+
 	fetchedInformation = Model.Product{
 		Title:        title,
 		Description:  description,
 		Rating:       rating,
-		Price:        price,
+		Price:        priceFloat, // Store as float64
 		ExtraDetails: extraInfoString,
 	}
+
 	return fetchedInformation, nil
+}
+
+// cleanPrice removes non-numeric characters (like the Euro symbol) from the price string
+func cleanPrice(price string) string {
+	// Replace common currency symbols and clean up the string
+	re := regexp.MustCompile(`[^\d.,]`)
+	cleaned := re.ReplaceAllString(price, "")
+
+	// Make sure we don't have multiple commas, and return the cleaned string
+	return cleaned
 }

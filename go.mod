@@ -15,6 +15,7 @@ require (
 	github.com/bogdanfinn/utls v1.6.1 // indirect
 	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/quic-go/quic-go v0.48.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect

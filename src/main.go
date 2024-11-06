@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/mux"
 	"github.com/langeflx7/amazonscrapergo/src/Model"
 	"github.com/langeflx7/amazonscrapergo/src/productviewer"
 	"github.com/rs/cors"
@@ -52,78 +53,91 @@ func checkDBConnection() error {
 }
 
 func main() {
-	// CORS-Handler setup
+	// Set up CORS
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"}, // allow every origin
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowedOrigins:   []string{"http://localhost:3000"}, // Allow your frontend's origin
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 	})
 
-	// HTTP-Routen einrichten
-	http.HandleFunc("/fetch-product", fetchProductHandler)
-	http.HandleFunc("/healthz", healthCheckHandler) // Health check endpoint
+	// Set up routes with gorilla mux
+	r := mux.NewRouter()
+	r.HandleFunc("/fetch-product", fetchProductHandler).Methods("POST")
+	r.HandleFunc("/healthz", healthCheckHandler).Methods("GET") // Health check endpoint
 
-	// CORS auf alle Routen anwenden
-	handlerWithCORS := c.Handler(http.DefaultServeMux)
-
-	// Starte den Server
+	// Start the server with CORS middleware
 	log.Println("Server started at :8080")
-	log.Fatal(http.ListenAndServe(":8080", handlerWithCORS))
+	log.Fatal(http.ListenAndServe(":8080", c.Handler(r)))
 }
 
 // fetchProductHandler handles requests to fetch product data and update the database
 func fetchProductHandler(w http.ResponseWriter, r *http.Request) {
-	// Setze den Content-Type auf application/json
-	w.Header().Set("Content-Type", "application/json")
-
-	// Überprüfe die Datenbankverbindung
+	// Check database connection
 	if err := checkDBConnection(); err != nil {
-		http.Error(w, `{"status": "error", "message": "Database connection error"}`, http.StatusInternalServerError)
+		http.Error(w, "Database connection error", http.StatusInternalServerError)
 		return
 	}
 
-	// Extrahiere product_id und url aus den Anfrageparametern
-	productIDStr := r.URL.Query().Get("product_id")
-	url := r.URL.Query().Get("url")
+	// Parse the JSON body
+	var requestData map[string]interface{}
+	err := json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
 
-	// Versuche, die product_id zu einer Ganzzahl zu konvertieren
+	// Extract product_id and url from the parsed body
+	productIDStr, ok := requestData["product_id"].(string)
+	if !ok {
+		http.Error(w, "Invalid product_id format", http.StatusBadRequest)
+		return
+	}
+
+	// Convert product_id to an integer
 	productID, err := strconv.Atoi(productIDStr)
 	if err != nil {
-		http.Error(w, `{"status": "error", "message": "Invalid product_id"}`, http.StatusBadRequest)
+		log.Printf("Invalid product_id received: %s", productIDStr)
+		http.Error(w, "Invalid product_id", http.StatusBadRequest)
 		return
 	}
 
-	// Extrahiere ASIN aus der URL
+	url, ok := requestData["url"].(string)
+	if !ok {
+		http.Error(w, "Invalid url format", http.StatusBadRequest)
+		return
+	}
+
+	// Extract ASIN from the provided URL
 	asin := extractASIN(url)
 	if asin == "" {
-		http.Error(w, `{"status": "error", "message": "Invalid URL, ASIN not found"}`, http.StatusBadRequest)
+		http.Error(w, "Invalid URL, ASIN not found", http.StatusBadRequest)
 		return
 	}
 
-	// Hole die Produktinformationen basierend auf der ASIN
-	productInfo, err := productviewer.FetchProductInfo(asin)
+	// Fetch product info based on ASIN
+	productInfo, err = productviewer.FetchProductInfo(asin)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"status": "error", "message": "Failed to fetch product info: %v"}`, err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to fetch product info: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Update die Produktinformationen in der MySQL-Datenbank
+	// Update product_info table in MySQL database
 	err = updateProductInfoInDB(productID, productInfo)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"status": "error", "message": "Failed to update product info in database: %v"}`, err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to update product info in database: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Sende die Produktinformationen als JSON-Antwort zurück
-	responseData, err := json.Marshal(map[string]interface{}{
-		"status":  "ok",
-		"product": productInfo,
-	})
+	// Send product data back as JSON response
+	responseData, err := json.Marshal(productInfo)
 	if err != nil {
-		http.Error(w, `{"status": "error", "message": "Failed to encode response data"}`, http.StatusInternalServerError)
+		http.Error(w, "Failed to encode response data", http.StatusInternalServerError)
 		return
 	}
+
+	// Set the content type to JSON and write the response
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(responseData)
 }
 
