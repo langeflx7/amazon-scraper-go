@@ -74,51 +74,56 @@ func main() {
 
 // fetchProductHandler handles requests to fetch product data and update the database
 func fetchProductHandler(w http.ResponseWriter, r *http.Request) {
-	// Check database connection
+	// Setze den Content-Type auf application/json
+	w.Header().Set("Content-Type", "application/json")
+
+	// Überprüfe die Datenbankverbindung
 	if err := checkDBConnection(); err != nil {
-		http.Error(w, "Database connection error", http.StatusInternalServerError)
+		http.Error(w, `{"status": "error", "message": "Database connection error"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// Extract product_id and url from query parameters
+	// Extrahiere product_id und url aus den Anfrageparametern
 	productIDStr := r.URL.Query().Get("product_id")
 	url := r.URL.Query().Get("url")
 
-	// Convert product_id to an integer
+	// Versuche, die product_id zu einer Ganzzahl zu konvertieren
 	productID, err := strconv.Atoi(productIDStr)
 	if err != nil {
-		http.Error(w, "Invalid product_id", http.StatusBadRequest)
+		http.Error(w, `{"status": "error", "message": "Invalid product_id"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Extract ASIN from the provided URL
+	// Extrahiere ASIN aus der URL
 	asin := extractASIN(url)
 	if asin == "" {
-		http.Error(w, "Invalid URL, ASIN not found", http.StatusBadRequest)
+		http.Error(w, `{"status": "error", "message": "Invalid URL, ASIN not found"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Fetch product info based on ASIN
-	productInfo, err = productviewer.FetchProductInfo(asin)
+	// Hole die Produktinformationen basierend auf der ASIN
+	productInfo, err := productviewer.FetchProductInfo(asin)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch product info: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"status": "error", "message": "Failed to fetch product info: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	// Update product_info table in MySQL database
+	// Update die Produktinformationen in der MySQL-Datenbank
 	err = updateProductInfoInDB(productID, productInfo)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to update product info in database: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"status": "error", "message": "Failed to update product info in database: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	// Send product data back as JSON response
-	responseData, err := json.Marshal(productInfo)
+	// Sende die Produktinformationen als JSON-Antwort zurück
+	responseData, err := json.Marshal(map[string]interface{}{
+		"status":  "ok",
+		"product": productInfo,
+	})
 	if err != nil {
-		http.Error(w, "Failed to encode response data", http.StatusInternalServerError)
+		http.Error(w, `{"status": "error", "message": "Failed to encode response data"}`, http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	w.Write(responseData)
 }
 
