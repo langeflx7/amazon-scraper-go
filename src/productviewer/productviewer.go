@@ -1,9 +1,10 @@
-package main
+package productviewer
 
 import (
-	"github.com/langeflx7/amazonscrapergo/src/Model"
 	"io"
 	"strings"
+
+	"github.com/langeflx7/amazonscrapergo/src/Model"
 
 	"github.com/PuerkitoBio/goquery"
 	http "github.com/bogdanfinn/fhttp"
@@ -101,6 +102,14 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		} else {
 			price = strings.Fields(priceClass)[0]
 		}
+	} else {
+		priceFromButton := strings.TrimSpace(doc.Find("span.a-size-mini.olpWrapper").Text())
+		price = priceFromButton
+		if price == "" {
+			doc.Find("span.a-price.a-text-price.a-size-medium").Each(func(i int, s *goquery.Selection) {
+				price = "€" + strings.Split(s.Text(), "€")[1]
+			})
+		}
 	}
 	var extraInfoCategories []string
 	doc.Find("ul.a-unordered-list.a-nostyle.a-vertical.a-spacing-none.detail-bullet-list").Each(func(i int, s *goquery.Selection) {
@@ -109,7 +118,34 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 			extraInfoCategories = append(extraInfoCategories, extraProductInfo)
 		}
 	})
-	extraInfoString := strings.Join(strings.Fields(strings.Join(extraInfoCategories[:2], "")), " ")
+	var extraInfoString string
+	if len(extraInfoCategories) != 0 {
+		extraInfoString = strings.Join(strings.Fields(strings.Join(extraInfoCategories[:2], "")), " ")
+	}
+
+	var category, categoryValue string
+	var categoryArray, categoryValueArray []string
+	if extraInfoString == "" && doc.Find("#productDetails_techSpec_section_1").Text() != "" {
+		doc.Find("th.a-color-secondary.a-size-base.prodDetSectionEntry").Each(func(i int, s *goquery.Selection) {
+			category = strings.TrimSpace(s.Text())
+			if category != "" && category != "Customer Reviews" && category != "Best Sellers Rank" {
+				categoryArray = append(categoryArray, category)
+			}
+		})
+		doc.Find("td.a-size-base.prodDetAttrValue").Each(func(i int, s *goquery.Selection) {
+			categoryValue = strings.TrimSpace(s.Text())
+			if categoryValue != "" {
+				categoryValueArray = append(categoryValueArray, categoryValue)
+			}
+		})
+	}
+	if len(categoryArray) != len(categoryValueArray) {
+		categoryValueArray = categoryValueArray[:len(categoryArray)]
+	}
+	for i := 0; i < len(categoryValueArray); i++ {
+		concat := categoryArray[i] + ":" + categoryValueArray[i] + ",\n"
+		extraInfoString = extraInfoString + concat
+	}
 	fetchedInformation = Model.Product{
 		Title:        title,
 		Description:  description,

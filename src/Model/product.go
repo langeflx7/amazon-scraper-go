@@ -1,10 +1,11 @@
 package Model
 
 type Product struct {
-	Title         string
-	Description   string
-	Rating        string
-	Price         string
-	ReviewSummary string
-	ExtraDetails  string
+	Title          string
+	Description    string
+	Rating         string
+	Price          string
+	ReviewSummary  string
+	ExtraDetails   string
+	CategoryString string
 }
