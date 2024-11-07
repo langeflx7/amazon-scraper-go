@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -22,6 +21,11 @@ var (
 	db          *sql.DB
 	err         error
 )
+
+type Response struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
 
 // init establishes the initial database connection with a configured connection pool
 func init() {
@@ -83,62 +87,85 @@ func fetchProductHandler(w http.ResponseWriter, r *http.Request) {
 	var requestData map[string]interface{}
 	err := json.NewDecoder(r.Body).Decode(&requestData)
 	if err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		// Return consistent error response
+		response := Response{Status: "error", Error: "Invalid JSON body"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	// Extract product_id and url from the parsed body
-	productIDStr, ok := requestData["product_id"].(string)
+	productID, ok := requestData["product_id"].(string)
 	if !ok {
-		http.Error(w, "Invalid product_id format", http.StatusBadRequest)
-		return
-	}
-
-	// Convert product_id to an integer
-	productID, err := strconv.Atoi(productIDStr)
-	if err != nil {
-		log.Printf("Invalid product_id received: %s", productIDStr)
-		http.Error(w, "Invalid product_id", http.StatusBadRequest)
+		// Return consistent error response
+		response := Response{Status: "error", Error: "Invalid product_id format"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	url, ok := requestData["url"].(string)
 	if !ok {
-		http.Error(w, "Invalid url format", http.StatusBadRequest)
+		// Return consistent error response
+		response := Response{Status: "error", Error: "Invalid url format"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	// Log incoming request
+	fmt.Printf("Incoming request to fetch product with product_id: %s\n", productID)
 
 	// Extract ASIN from the provided URL
 	asin := extractASIN(url)
 	if asin == "" {
-		http.Error(w, "Invalid URL, ASIN not found", http.StatusBadRequest)
+		// Return consistent error response
+		response := Response{Status: "error", Error: "Invalid URL, ASIN not found"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	// Fetch product info based on ASIN
 	productInfo, err = productviewer.FetchProductInfo(asin)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch product info: %v", err), http.StatusInternalServerError)
+		// Return consistent error response
+		response := Response{Status: "error", Error: fmt.Sprintf("Failed to fetch product info: %v", err)}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	// Log fetched product data (excluding description and details)
+	fmt.Println("Fetched product data:")
+	fmt.Printf("Title: %s\n", productInfo.Title)
+	fmt.Printf("Price: %f\n", productInfo.Price)
+	fmt.Printf("Rating: %f\n", productInfo.Rating)
 
 	// Update product_info table in MySQL database
 	err = updateProductInfoInDB(productID, productInfo)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to update product info in database: %v", err), http.StatusInternalServerError)
+		// Return consistent error response
+		response := Response{Status: "error", Error: fmt.Sprintf("Failed to update product info in database: %v", err)}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Send product data back as JSON response
-	responseData, err := json.Marshal(productInfo)
-	if err != nil {
-		http.Error(w, "Failed to encode response data", http.StatusInternalServerError)
-		return
+	// Send success response with product data
+	responseData := map[string]interface{}{
+		"status": "ok",
+		"data":   productInfo,
 	}
-
-	// Set the content type to JSON and write the response
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(responseData)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(responseData)
 }
 
 // healthCheckHandler provides a health check endpoint to verify the server and database status
@@ -162,7 +189,7 @@ func extractASIN(url string) string {
 }
 
 // updateProductInfoInDB updates the product_info table in MySQL with product data
-func updateProductInfoInDB(productID int, productInfo Model.Product) error {
+func updateProductInfoInDB(productID string, productInfo Model.Product) error {
 	query := `UPDATE product_info
 				SET title = ?, description = ?, price = ?, rating = ?
 				WHERE product_id = ?`

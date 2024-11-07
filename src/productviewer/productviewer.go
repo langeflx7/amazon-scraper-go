@@ -1,6 +1,7 @@
 package productviewer
 
 import (
+	"fmt"
 	"io"
 	"regexp"
 	"strconv"
@@ -24,7 +25,7 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 		Title:       "",
 		Description: "",
 		Rating:      "",
-		Price:       0.0, // Price should be a float64
+		Price:       0.0, // Default value for price as float64
 	}
 	// Concatenate URL directly with product ASIN
 	url := "https://www.amazon.de/-/en/dp/" + asin
@@ -99,78 +100,80 @@ func FetchProductInfo(asin string) (Model.Product, error) {
 	var price string
 	priceClass := strings.TrimSpace(doc.Find("span.aok-offscreen").Text())
 	if priceClass != "" {
-		// Remove any non-numeric characters (like the Euro symbol)
+		// Clean the price
 		price = cleanPrice(priceClass)
 	} else {
 		priceFromButton := strings.TrimSpace(doc.Find("span.a-size-mini.olpWrapper").Text())
 		price = priceFromButton
 		if price == "" {
 			doc.Find("span.a-price.a-text-price.a-size-medium").Each(func(i int, s *goquery.Selection) {
-				price = "â‚¬" + strings.Split(s.Text(), "â‚¬")[1]
+				price = "Ã¢â€šÂ¬" + strings.Split(s.Text(), "Ã¢â€šÂ¬")[1]
 			})
 		}
 	}
 
-	var extraInfoCategories []string
-	doc.Find("ul.a-unordered-list.a-nostyle.a-vertical.a-spacing-none.detail-bullet-list").Each(func(i int, s *goquery.Selection) {
-		extraProductInfo := strings.TrimSpace(s.Find("li").Text())
-		if extraProductInfo != "" {
-			extraInfoCategories = append(extraInfoCategories, extraProductInfo)
-		}
-	})
-	var extraInfoString string
-	if len(extraInfoCategories) != 0 {
-		extraInfoString = strings.Join(strings.Fields(strings.Join(extraInfoCategories[:2], "")), " ")
-	}
+	// Debug output for the price before conversion
+	fmt.Printf("Extracted Price (before cleanup): %s\n", price)
 
-	var category, categoryValue string
-	var categoryArray, categoryValueArray []string
-	if extraInfoString == "" && doc.Find("#productDetails_techSpec_section_1").Text() != "" {
-		doc.Find("th.a-color-secondary.a-size-base.prodDetSectionEntry").Each(func(i int, s *goquery.Selection) {
-			category = strings.TrimSpace(s.Text())
-			if category != "" && category != "Customer Reviews" && category != "Best Sellers Rank" {
-				categoryArray = append(categoryArray, category)
-			}
-		})
-		doc.Find("td.a-size-base.prodDetAttrValue").Each(func(i int, s *goquery.Selection) {
-			categoryValue = strings.TrimSpace(s.Text())
-			if categoryValue != "" {
-				categoryValueArray = append(categoryValueArray, categoryValue)
-			}
-		})
-	}
-	if len(categoryArray) != len(categoryValueArray) {
-		categoryValueArray = categoryValueArray[:len(categoryArray)]
-	}
-	for i := 0; i < len(categoryValueArray); i++ {
-		concat := categoryArray[i] + ":" + categoryValueArray[i] + ",\n"
-		extraInfoString = extraInfoString + concat
-	}
-
-	// Convert price string to float64
+	// Clean and convert the price string
 	priceFloat, err := strconv.ParseFloat(price, 64)
 	if err != nil {
 		// If price parsing fails, return 0.0
+		fmt.Printf("Error parsing price: %s. Setting to 0.0\n", price)
 		priceFloat = 0.0
 	}
 
+	// Final fetched product information
 	fetchedInformation = Model.Product{
 		Title:        title,
 		Description:  description,
 		Rating:       rating,
 		Price:        priceFloat, // Store as float64
-		ExtraDetails: extraInfoString,
+		ExtraDetails: "Extra info not extracted",
 	}
 
 	return fetchedInformation, nil
 }
 
-// cleanPrice removes non-numeric characters (like the Euro symbol) from the price string
+// cleanPrice entfernt alle nicht numerischen Zeichen und konvertiert den Preis zu einem float64 mit maximal zwei Dezimalstellen
 func cleanPrice(price string) string {
-	// Replace common currency symbols and clean up the string
-	re := regexp.MustCompile(`[^\d.,]`)
-	cleaned := re.ReplaceAllString(price, "")
+	// Step 1: Entferne alle nicht numerischen Zeichen (auÃŸer Komma und Punkt)
+	re := regexp.MustCompile(`[^\d,\.]`)           // Entferne alles, was keine Ziffer, Komma oder Punkt ist
+	cleanedPrice := re.ReplaceAllString(price, "") // Entferne unerwÃ¼nschte Zeichen
 
-	// Make sure we don't have multiple commas, and return the cleaned string
-	return cleaned
+	// Debug-Ausgabe: Preis nach der ersten Bereinigung
+	fmt.Printf("Cleaned Price: %s\n", cleanedPrice)
+
+	// Step 2: Ersetze das Komma durch einen Punkt, falls vorhanden
+	if strings.Contains(cleanedPrice, ",") {
+		// Ersetze das erste Komma mit einem Punkt fÃ¼r eine korrekte Umwandlung in float64
+		cleanedPrice = strings.Replace(cleanedPrice, ",", ".", 1)
+	}
+
+	// Step 3: ÃœberprÃ¼fe, ob mehr als ein Punkt vorhanden ist
+	if strings.Count(cleanedPrice, ".") > 1 {
+		// Wenn mehrere Punkte vorhanden sind, behalte nur den ersten Punkt und entferne alle anderen
+		splitPrice := strings.Split(cleanedPrice, ".")
+		cleanedPrice = splitPrice[0] + "." + strings.Join(splitPrice[1:], "")
+	}
+
+	// Debug-Ausgabe: Preis nach der Umformatierung
+	fmt.Printf("Cleaned Price After Formatting: %s\n", cleanedPrice)
+
+	// Step 4: Konvertiere den Preis in float64 und runde auf 2 Dezimalstellen
+	priceFloat, err := strconv.ParseFloat(cleanedPrice, 64)
+	if err != nil {
+		// Fehler beim Parsen, setze auf 0.0
+		fmt.Println("Error parsing price:", cleanedPrice, "Setting to 0.0")
+		return "0.0"
+	}
+
+	// Runde auf 2 Dezimalstellen
+	roundedPrice := fmt.Sprintf("%.2f", priceFloat)
+
+	// Debug-Ausgabe: Gerundeter Preis
+	fmt.Printf("Rounded Price: %s\n", roundedPrice)
+
+	// Gebe den gerundeten Preis zurÃ¼ck
+	return roundedPrice
 }
